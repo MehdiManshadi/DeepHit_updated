@@ -1,6 +1,7 @@
-# ==================================================
-# Reproducibility (MUST be first)
-# ==================================================
+# This script trains the DeepHit model on the provided dataset and 
+# evaluates its performance using the C-index at a specified time horizon.
+# It also includes a permutation feature importance analysis to identify
+# which features are most influential for the model's predictions at that horizon.
 import os
 import random
 import numpy as np
@@ -15,7 +16,6 @@ SEED = 13
 num_Event = 2
 eval_time = 12
 CV_ITERATION = 3
-num_event = 2
 
 def setSeed(seed=SEED):
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -42,11 +42,12 @@ from ClassDeepHit import DeepHitPlus
 # Load data
 # ==================================================
 path = (
-    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Refrence_list.csv"
+    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Sthlm_Gotland_model_data_binary.csv"
 )
 
 x_dim, (data, time, label), (mask1, mask2) = impt.import_dataset(path,time_scale=1.2)
 
+# Normalize age and log-transform certain features
 data[:, 0] = (data[:, 0] - data[:, 0].mean()) / data[:, 0].std()
 
 for j in [37, 38, 39]:
@@ -91,7 +92,7 @@ for i in range(0, CV_ITERATION):
     num_bins = mask2.shape[1]   # T (time bins)
 
     model = DeepHitPlus(
-        num_event=num_event,
+        num_event=num_Event,
         num_bins=num_bins,
         shared_layers=(30, 15, 5),
         MR_layers=[5, 10],
@@ -204,7 +205,7 @@ for i in range(0, CV_ITERATION):
         print(pfi[k, top_idx])
 '''
 path = (
-    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Sporadic_Competing_No_Age_NoDisMetLimit_COMBINED_L2_medicine_COMBINED_ICD_BINARY.csv"
+    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Norr_model_data_binary.csv"
 )
 
 x_dim, (data, time, label), (mask1, mask2) = impt.import_dataset(path,time_scale=1.2)
@@ -246,51 +247,3 @@ for t, t_time in enumerate(eval_time):
             # since we compare risk_scores, the true label is that event occurs before time horizon
 print("C-index at eval time:", resultfeat)
 
-'''
-# Example data
-df = pd.read_csv(path)
-
-# ---- Enforce censoring beyond horizon (using index) ----
-df['time'] = df['time'] * 12
-df["label"] = np.where(df["time"] >= 12, 0, df["label"])
-df["time"]  = np.where(df["time"] >= 12, 12, df["time"])
-import numpy as np
-from sklearn.datasets import load_digits
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-import umap
-reducer = umap.UMAP()
-dff = df.drop(columns=["time", "label"])
-dff = dff.iloc[:, :34]  # Keep only the first 34 features for visualization
-scaled_data = StandardScaler().fit_transform(dff)
-embedding = reducer.fit_transform(scaled_data)
-plt.figure(figsize=(8,6))
-
-palette = sns.color_palette()
-
-label_names = {
-    0: "Class 0",
-    1: "Class 1",
-    2: "Class 2"
-}
-
-for cls in [0, 1, 2]:
-    idx = df["label"] == cls
-    
-    plt.scatter(
-        embedding[idx, 0],
-        embedding[idx, 1],
-        s=5,
-        color=palette[cls],
-        label=label_names[cls]
-    )
-
-plt.gca().set_aspect('equal', 'datalim')
-plt.title('UMAP projection of the dataset', fontsize=24)
-
-plt.legend(title="Labels")
-plt.show()
-'''
