@@ -1,106 +1,117 @@
 import numpy as np
 import pandas as pd
 
-def f_get_fc_mask1(time, label, num_Event, num_Category):
-    """
-    Likelihood mask
-    shape: [N, num_Event, num_Category]
-    """
-    N = int(time.shape[0])
-    mask = np.zeros((N, num_Event, num_Category))
 
-    for i in range(N):
+# ==================================================
+# MASK GENERATION (DeepHit)
+# ==================================================
+
+def f_get_fc_mask1(time, label, num_event, num_category):
+    """
+    Likelihood mask for DeepHit.
+
+    Shape:
+        [N, num_event, num_category]
+    """
+    n_samples = time.shape[0]
+    mask = np.zeros((n_samples, num_event, num_category))
+
+    for i in range(n_samples):
         t = int(time[i, 0])
-        if label[i, 0] != 0:  # event occurred
-            k = int(label[i, 0]) - 1
-            mask[i, k, t] = 1
-        else:  # censored
+
+        # event occurred
+        if label[i, 0] != 0:
+            event_type = int(label[i, 0]) - 1
+            mask[i, event_type, t] = 1
+
+        # censored
+        else:
             mask[i, :, t + 1:] = 1
 
     return mask
 
 
-def f_get_fc_mask2(time, num_Category):
+def f_get_fc_mask2(time, num_category):
     """
-    Ranking mask
-    shape: [N, num_Category]
-    """
-    N = time.shape[0]
-    mask = np.zeros((N, num_Category))
+    Ranking mask for DeepHit.
 
-    # single-measurement case (DeepHit default)
-    for i in range(N):
+    Shape:
+        [N, num_category]
+    """
+    n_samples = time.shape[0]
+    mask = np.zeros((n_samples, num_category))
+
+    for i in range(n_samples):
         t = int(time[i, 0])
         mask[i, :t + 1] = 1
 
     return mask
 
 
+# ==================================================
+# DATA LOADING PIPELINE
+# ==================================================
 
-def import_dataset(
-    csv_path,
-    time_scale=1.2
-):
-    # ---- Load data ----
+def import_dataset(csv_path, time_scale=1.2):
+    """
+    Load and preprocess dataset for DeepHit survival analysis.
+
+    Returns:
+        x_dim  : number of features
+        DATA   : (features, time, label)
+        MASK   : (mask1, mask2)
+    """
+
+    # ---- Load raw data ----
     df = pd.read_csv(csv_path)
-    
-    # ---- Enforce censoring beyond horizon (using index) ----
-    df['time'] = df['time'] * 12
+
+    # ---- Censoring rule (time horizon) ----
+    df["time"] = df["time"] * 12
     df["label"] = np.where(df["time"] >= 12, 0, df["label"])
-    df["time"]  = np.where(df["time"] >= 12, 12, df["time"])
+    df["time"] = np.where(df["time"] >= 12, 12, df["time"])
 
-    TimeLabel = df.columns[0:2].tolist()
-    '''
-    Basics  = df.columns[2:9].tolist()
-    Planned = df.columns[9:13].tolist()
-    ATCs    = df.columns[13:34].tolist()
-    ICDs    = df.columns[34:53].tolist()
-    ICDs_Specific = df.columns[53:57].tolist()
-    RFs = df.columns[57:62].tolist()
-    ICDs_Summary = df.columns[[62,63,64]].tolist()
+    # ---- Define feature groups ----
+    # this part is specific to the dataset structure and should be adapted if the dataset changes
+    time_label_cols = df.columns[0:2].tolist()
 
-    
-    '''
-    # All included features:
-    Basics  = df.columns[2:9].tolist()
-    Planned = df.columns[9:13].tolist()
-    ATCs    = df.columns[13:61].tolist()
-    ICDs    = df.columns[61:77].tolist()
-    ICDs_Specific = df.columns[77:82].tolist()
-    RFs = df.columns[82:87].tolist()
-    ICDs_Summary = df.columns[[87,88,89]].tolist()
+    basics = df.columns[2:9].tolist()
+    planned = df.columns[9:13].tolist()
+    atcs = df.columns[13:61].tolist()
+    icds = df.columns[61:77].tolist()
+    icds_specific = df.columns[77:82].tolist()
+    rfs = df.columns[82:87].tolist()
+    icds_summary = df.columns[[87, 88, 89]].tolist()
 
-    df = df[TimeLabel + Basics + Planned + ATCs + RFs + ICDs + ICDs_Specific + ICDs_Summary]
-    #cols = [0, 1, 2, 41, 8, 20, 40, 24, 25, 7, 17, 18]
-    #cols = np.array([-2,-1, 0,  7,  3, 28, 35, 33,  9,  2,  6, 37, 48, 19, 10, 54, 30, 39, 15, 32, 38, 12, 60, 47, 41, 52, 44, 45, 13, 67,68, 69])+2
-    #df = df.iloc[:, cols]
-    time = df['time'].to_numpy().reshape(-1, 1)
-    label = df['label'].to_numpy().astype(int).reshape(-1, 1)
-    # ---- Feature matrix ----
-    feature_cols = df.columns[2:]   # keep same convention
+    feature_cols = (
+        basics
+        + planned
+        + atcs
+        + rfs
+        + icds
+        + icds_specific
+        + icds_summary
+    )
+    # Note: the specific column indices for feature groups are based on the original dataset and may need to be updated if the dataset structure changes.
+    # ---- Subset dataset ----
+    df = df[time_label_cols + feature_cols]
 
-    data = df[feature_cols].to_numpy()
+    # ---- Extract arrays ----
+    time = df["time"].to_numpy().reshape(-1, 1)
+    label = df["label"].to_numpy().astype(int).reshape(-1, 1)
+    data = df.iloc[:, 2:].to_numpy()
 
-    # Age
-    #data[:, 0] = (data[:, 0] - data[:, 0].mean()) / data[:, 0].std()
-    '''
-# Zero-heavy counts
-    for j in [37, 38, 39]:
-        data[:, j] = np.log1p(data[:, j])
-        data[:, j] = (data[:, j] - data[:, j].mean()) / data[:, j].std()
-    '''
-
-    # ---- DeepHit parameters (from index, not time) ----
-    num_Category = np.round(np.max(time) * time_scale).astype(int)
-    num_Event = label.max().astype(int)
+    # ---- DeepHit configuration ----
+    num_category = int(np.round(np.max(time) * time_scale))
+    num_event = int(np.max(label))
     x_dim = data.shape[1]
 
-    # ---- Masks (USE timeIndex, NOT time) ----
-    mask1 = f_get_fc_mask1(time, label, num_Event, num_Category=num_Category)
-    mask2 = f_get_fc_mask2(time, num_Category=num_Category)
+    # ---- Masks ----
+    mask1 = f_get_fc_mask1(time, label, num_event, num_category)
+    mask2 = f_get_fc_mask2(time, num_category)
 
-    DIM = x_dim
-    DATA = (data, time, label)          # continuous time preserved
-    MASK = (mask1, mask2)
+    # ---- Output structure ----
+    dim = x_dim
+    data_tuple = (data, time, label)
+    mask_tuple = (mask1, mask2)
 
-    return DIM, DATA, MASK
+    return dim, data_tuple, mask_tuple
