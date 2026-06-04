@@ -14,28 +14,17 @@ def setSeed(seed=SEED):
     random.seed(seed)
     np.random.seed(seed)
     tf.random.set_seed(seed)
-'''
-setSeed(SEED)
-plt.ion()
-fig, ax = plt.subplots(figsize=(7, 4))
 
-
-
-line, = ax.plot([], [], linewidth=1)
-ax.set_xlabel("Iteration")
-ax.set_ylabel("Total Loss (per batch)")
-ax.set_title("DeepHit Training Loss (per iteration)")
-ax.grid(True)'''
 batch_loss_history = []
 iteration_history = []
 
 
 def TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
-                  va_data, va_mask1, va_mask2, va_time, va_label):
+                  va_data, va_mask1, va_mask2, va_time, va_label, eval_time, test_size = 0.2, max_epochs = 100, batch_size = 128, learning_rate = 1e-3, alpha=1.0, beta=1.0):
     # ==================================================
     # Optimizer
     # ==================================================
-    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     num_Category = tr_mask2.shape[1] 
 
     # ==================================================
@@ -52,8 +41,8 @@ def TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
                 mask2,
                 label,
                 timeIndex,
-                alpha=1.0,
-                beta=1.0
+                alpha=alpha,
+                beta=beta
             )
 
         grads = tape.gradient(totalLoss, model.trainable_variables)
@@ -74,8 +63,8 @@ def TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
             mask2,
             label,
             timeIndex,
-            alpha=1.0,
-            beta=1.0
+            alpha=alpha,
+            beta=beta
         )
 
         return totalLoss, lossLL, lossRank
@@ -90,13 +79,11 @@ def TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
     tr_mask2, te_mask2
     ) = train_test_split(
     tr_data, tr_time, tr_label, tr_mask1, tr_mask2,
-    test_size=0.2,
-    random_state=SEED
-)
-    num_epochs = 100
-    batch_size = 128
-    num_Event = 2
-    eval_time = [12]
+    test_size=test_size,
+    random_state=SEED)
+
+
+    num_Event = tr_mask1.shape[1]
 
     N = tr_data.shape[0]
 
@@ -106,9 +93,11 @@ def TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
     train_ll = []
     train_rank = []
     global_iter = 0
-    Best_train_loss = 100
-    BreakLimit = 3
-    for epoch in range(num_epochs):
+    best_train_loss = 100
+    best_cindex = 0
+    best_model = None
+    break_limit = 3
+    for epoch in range(max_epochs):
         # shuffle indices (reproducible)
         idx = np.random.permutation(N)
 
@@ -139,13 +128,13 @@ def TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
             te_label,
             te_time
         )
-        if(teLoss < Best_train_loss):
-            Best_train_loss = teLoss
-            BreakLimit = 3
+        if(teLoss < best_train_loss):
+            best_train_loss = teLoss
+            break_limit = 3
         else:
-            BreakLimit = BreakLimit - 1
+            break_limit = break_limit - 1
 
-        if(BreakLimit == 0):
+        if(break_limit == 0):
             break
 
         pred = model.call(va_data)
@@ -170,54 +159,17 @@ def TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
                     #result.loc[k+1, feat, perm_iter, "Delta t = " + "{:03d}".format(t_time)] = result1[k,t] - resultfeat[k,t]
                     # since we compare risk_scores, the true label is that event occurs before time horizon
         
-        '''risk = model.call(tr_data, False).numpy()
-        risk = risk[:,0,12]
-        n = risk.shape[0]
-        eventType = tr_label
+        if(resultfeat[0,0] > best_cindex):
+            best_cindex = resultfeat[0,0]
+            best_cindex_comp = resultfeat[1,0]
+            best_model = model
 
-        # x-axis jitter (sample index)
-        x = np.arange(n)
-        x = x + np.random.uniform(-0.3, 0.3, n)
-
-        # Masks
-        censored = eventType == 0
-        event1 = eventType == 1
-        event2 = eventType == 2
-        # Plot
-        plt.figure(figsize=(5, 6))
-
-        plt.scatter(x[censored.squeeze()], risk[censored.squeeze()],
-                    color="lightgrey", alpha=0.4, s=12, label="Censored")
-
-        plt.scatter(x[event1.squeeze()], risk[event1.squeeze()],
-                    color="red", alpha=0.8, s=18, label="Event 1")
-
-        plt.scatter(x[event2.squeeze()], risk[event2.squeeze()],
-                    color="blue", alpha=0.8, s=18, label="Event 2")
-
-        plt.ylabel("Predicted risk (at t = 1)")
-        plt.title("Risk scatter colored by outcome")
-
-        plt.xticks([])
-        plt.legend(frameon=False)
-        plt.tight_layout()
-        plt.show(block=False)
-        plt.pause(0.001)
-        plt.draw()
-        plt.pause(0.01)'''
-        '''line.set_data(iteration_history, batch_loss_history)
-        ax.relim()
-        ax.autoscale_view()
-
-        plt.draw()
-        plt.pause(0.01)
-        '''
         print(
             f"Epoch {epoch:03d} | "
             f"Train {np.mean(train_losses):.4f} "
             f"(LL {np.mean(train_ll):.4f}, Rank {np.mean(train_rank):.4f}) | "
             f"Val {teLoss.numpy():.4f}"
         )
-        print(resultfeat)
-        
-    return model
+    
+    print(f"\nBest C-index at eval time: {best_cindex:.3f} (competing event: {best_cindex_comp:.3f})\n")
+    return best_model
