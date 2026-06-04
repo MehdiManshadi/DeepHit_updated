@@ -50,17 +50,29 @@ def import_dataset(
     df["time"]  = np.where(df["time"] >= 12, 12, df["time"])
 
     TimeLabel = df.columns[0:2].tolist()
-
+    '''
     Basics  = df.columns[2:9].tolist()
     Planned = df.columns[9:13].tolist()
     ATCs    = df.columns[13:34].tolist()
     ICDs    = df.columns[34:53].tolist()
-    ICDs_Specific = df.columns[54:58].tolist()
-    RFs = df.columns[58:63].tolist()
-    ICDs_Summary = df.columns[[63,64,65]].tolist()
+    ICDs_Specific = df.columns[53:57].tolist()
+    RFs = df.columns[57:62].tolist()
+    ICDs_Summary = df.columns[[62,63,64]].tolist()
 
-    df = df[TimeLabel + Basics + Planned + ATCs + RFs + ICDs_Summary]
+    
+    '''
+    # All included features:
+    Basics  = df.columns[2:9].tolist()
+    Planned = df.columns[9:13].tolist()
+    ATCs    = df.columns[13:61].tolist()
+    ICDs    = df.columns[61:77].tolist()
+    ICDs_Specific = df.columns[77:82].tolist()
+    RFs = df.columns[82:87].tolist()
+    ICDs_Summary = df.columns[[87,88,89]].tolist()
+
+    df = df[TimeLabel + Basics + Planned + ATCs + RFs + ICDs + ICDs_Specific + ICDs_Summary]
     #cols = [0, 1, 2, 41, 8, 20, 40, 24, 25, 7, 17, 18]
+    #cols = np.array([-2,-1, 0,  7,  3, 28, 35, 33,  9,  2,  6, 37, 48, 19, 10, 54, 30, 39, 15, 32, 38, 12, 60, 47, 41, 52, 44, 45, 13, 67,68, 69])+2
     #df = df.iloc[:, cols]
     time = df['time'].to_numpy().reshape(-1, 1)
     label = df['label'].to_numpy().astype(int).reshape(-1, 1)

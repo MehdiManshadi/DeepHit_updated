@@ -6,9 +6,8 @@ import pandas as pd
 import umap
 
 files = {
-    1: "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Sthlm_Gotland_model_data_count.csv",
-    2: "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Norr_model_data_count.csv",
-    3: "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Sydöstra_model_data_binary.csv"
+    1: "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Sthlm_Gotland_model_data_binary_ALL_Included.csv",
+    6: "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Norr_model_data_binary.csv"
 }
 
 dfs = []
@@ -24,18 +23,20 @@ df['time'] = df['time'] * 12
 df["label"] = np.where(df["time"] >= 12, 0, df["label"])
 df["time"]  = np.where(df["time"] >= 12, 12, df["time"])
 
-reducer = umap.UMAP()
+reducer = umap.UMAP(metric='jaccard',
+    random_state=42
+)
 
 TimeLabel = df.columns[1:2].tolist()
 Basics  = df.columns[2:9].tolist()
 Planned = df.columns[9:13].tolist()
-ATCs    = df.columns[13:34].tolist()
-ICDs    = df.columns[34:53].tolist()
-ICDs_Specific = df.columns[54:58].tolist()
-RFs = df.columns[58:63].tolist()
-ICDs_Summary = df.columns[[63,64,65]].tolist()
+ATCs    = df.columns[13:61].tolist()
+ICDs    = df.columns[61:77].tolist()
+ICDs_Specific = df.columns[77:82].tolist()
+RFs = df.columns[82:87].tolist()
+ICDs_Summary = df.columns[[87,88,89]].tolist()
 
-dff = df[TimeLabel + Basics + Planned + ATCs + RFs + ICDs_Summary]
+dff = df[TimeLabel + Basics + Planned + ATCs + RFs + ICDs + ICDs_Specific + ICDs_Summary]
 
 scaled_data = StandardScaler().fit_transform(dff)
 embedding = reducer.fit_transform(scaled_data)
@@ -45,8 +46,7 @@ palette = sns.color_palette()
 
 region_names = {
     1: "Region Sthlm_Gotland",
-    2: "Region Norr",
-    3: "Region Sodra",
+    6: "Region Norr"
 }
 
 for region, name in region_names.items():
@@ -140,10 +140,18 @@ model = CatBoostClassifier(
     depth=6,
     loss_function="MultiClass",
     eval_metric='AUC',
-    verbose=100
+    verbose=100,
+    class_weights=[1.0, 2.0, 8.0]
 )
 
 model.fit(X_train, y_train)
 
 preds = model.predict(X_test)
 probs = model.predict_proba(X_test)[:, 1]
+
+from sklearn.metrics import f1_score
+
+preds = model.predict(X_test)
+
+f1 = f1_score(y_test, preds, average="macro")
+print("Macro F1:", f1)
