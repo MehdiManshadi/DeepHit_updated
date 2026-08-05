@@ -12,11 +12,13 @@ from utils_eval import c_index
 import pandas as pd
 import ImportDatabase as impt
 from ClassDeepHit import DeepHitPlus
+from sklearn.model_selection import train_test_split
 
-SEED = 13
+SEED = 321
+
 num_Event = 2
 eval_time = 12
-CV_ITERATION = 3
+CV_ITERATION = 5
 
 def setSeed(seed=SEED):
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -58,7 +60,7 @@ label  = label.astype(np.int32)
 # ==================================================
 kf = KFold(n_splits=CV_ITERATION, shuffle=True, random_state=SEED)
 splits = list(kf.split(data))
-for i in [2]:
+for i in range(CV_ITERATION):
     tf.keras.backend.clear_session()
     setSeed(SEED)
     train_index, val_index = splits[i]
@@ -149,7 +151,7 @@ for i in [2]:
         baseline = compute_cindex_at_time(
             model, x_val, time_val, label_val, eval_horizon
         )
-
+        '''
         importance = np.zeros((num_Event, n_features))
 
         for j in range(n_features):
@@ -172,7 +174,7 @@ for i in [2]:
                 print(f"PFI done for feature {j}/{n_features}")
 
         return importance
-
+    
     pfi = permutation_feature_importance(
         model=model,
         x_val=va_data,
@@ -181,15 +183,31 @@ for i in [2]:
         eval_horizon=eval_horizon,
         n_repeats=3
     )
-
+    
     print("PFI shape:", pfi.shape)  # (num_Event, num_features)
-
+    
     # Top 10 features per event
     for k in range(num_Event):
         top_idx = np.argsort(-pfi[k])[:10]
         print(f"\nTop features for event {k+1}:")
         print(top_idx)
         print(pfi[k, top_idx])
+    '''
+# Final traing of the model after cross-validation, with the best hyperparameters, on the entire dataset
+(tr_data, va_data,
+    tr_time, va_time,
+    tr_label, va_label,
+    tr_mask1, va_mask1,
+    tr_mask2, va_mask2) = train_test_split(
+    data, time, label, mask1, mask2,
+    test_size=0.2,
+    random_state=SEED
+)
+
+model = TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
+                va_data, va_mask1, va_mask2, va_time, va_label, eval_time = [12], 
+                test_size = 0.2, max_epochs = 100, batch_size = 128, learning_rate = 1e-3, alpha=1.0, beta=1.0)
+
 
 path = np.array([
     "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Uppsala_Örebro_model_data_binary.csv",
