@@ -124,11 +124,12 @@ plt.show()
 
 from catboost import CatBoostClassifier
 from sklearn.model_selection import train_test_split
+from ImportDatabase import import_dataset
 path = (
     "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Sthlm_Gotland_model_data_binary.csv"
 )
 
-x_dim, (data, time, label), (mask1, mask2) = impt.import_dataset(path,time_scale=1.2)
+x_dim, (data, time, label), (mask1, mask2) = import_dataset(path,time_scale=1.2)
 
 X_train, X_test, y_train, y_test = train_test_split(
     data, label, test_size=0.2, random_state=42
@@ -155,3 +156,9 @@ preds = model.predict(X_test)
 
 f1 = f1_score(y_test, preds, average="macro")
 print("Macro F1:", f1)
+
+from sklearn.metrics import confusion_matrix
+
+cm = confusion_matrix(y_test, preds)
+
+print(cm)
