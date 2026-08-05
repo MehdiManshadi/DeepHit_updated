@@ -13,6 +13,10 @@ import pandas as pd
 import ImportDatabase as impt
 from ClassDeepHit import DeepHitPlus
 from sklearn.model_selection import train_test_split
+from dotenv import load_dotenv
+from pathlib import Path
+
+load_dotenv()
 
 SEED = 321
 
@@ -32,9 +36,8 @@ setSeed(SEED)
 # ==================================================
 # Load data
 # ==================================================
-path = (
-    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Sthlm_Gotland_model_data_binary.csv"
-)
+data_dir = Path(os.getenv("DATA_DIR"))
+path = data_dir / "Region_Sthlm_Gotland_model_data_binary.csv"
 
 x_dim, (data, time, label), (mask1, mask2) = impt.import_dataset(path,time_scale=1.2)
 
@@ -135,64 +138,7 @@ for i in range(CV_ITERATION):
 
     print("Baseline C-index:", baseline_cindex)
 
-    def permutation_feature_importance(
-        model,
-        x_val,
-        time_val,
-        label_val,
-        eval_horizon,
-        n_repeats=5
-    ):
-        """
-        Permutation feature importance using drop in C-index.
-        Returns array of shape (num_Event, num_features).
-        """
-        n_features = x_val.shape[1]
-        baseline = compute_cindex_at_time(
-            model, x_val, time_val, label_val, eval_horizon
-        )
-        '''
-        importance = np.zeros((num_Event, n_features))
-
-        for j in range(n_features):
-            drops = []
-
-            for _ in range(n_repeats):
-                x_perm = x_val.copy()
-                perm_idx = np.random.permutation(x_perm.shape[0])
-                x_perm[:, j] = x_perm[perm_idx, j]
-
-                cidx_perm = compute_cindex_at_time(
-                    model, x_perm, time_val, label_val, eval_horizon
-                )
-
-                drops.append(baseline - cidx_perm)
-
-            importance[:, j] = np.mean(drops, axis=0)
-
-            if j % 10 == 0:
-                print(f"PFI done for feature {j}/{n_features}")
-
-        return importance
     
-    pfi = permutation_feature_importance(
-        model=model,
-        x_val=va_data,
-        time_val=va_time,
-        label_val=va_label,
-        eval_horizon=eval_horizon,
-        n_repeats=3
-    )
-    
-    print("PFI shape:", pfi.shape)  # (num_Event, num_features)
-    
-    # Top 10 features per event
-    for k in range(num_Event):
-        top_idx = np.argsort(-pfi[k])[:10]
-        print(f"\nTop features for event {k+1}:")
-        print(top_idx)
-        print(pfi[k, top_idx])
-    '''
 # Final traing of the model after cross-validation, with the best hyperparameters, on the entire dataset
 (tr_data, va_data,
     tr_time, va_time,
@@ -209,12 +155,71 @@ model = TrainDeepHit(model, tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
                 test_size = 0.2, max_epochs = 100, batch_size = 128, learning_rate = 1e-3, alpha=1.0, beta=1.0)
 
 
+def permutation_feature_importance(
+    model,
+    x_val,
+    time_val,
+    label_val,
+    eval_horizon,
+    n_repeats=5
+):
+    """
+    Permutation feature importance using drop in C-index.
+    Returns array of shape (num_Event, num_features).
+    """
+    n_features = x_val.shape[1]
+    baseline = compute_cindex_at_time(
+        model, x_val, time_val, label_val, eval_horizon
+    )
+    '''
+    importance = np.zeros((num_Event, n_features))
+
+    for j in range(n_features):
+        drops = []
+
+        for _ in range(n_repeats):
+            x_perm = x_val.copy()
+            perm_idx = np.random.permutation(x_perm.shape[0])
+            x_perm[:, j] = x_perm[perm_idx, j]
+
+            cidx_perm = compute_cindex_at_time(
+                model, x_perm, time_val, label_val, eval_horizon
+            )
+
+            drops.append(baseline - cidx_perm)
+
+        importance[:, j] = np.mean(drops, axis=0)
+
+        if j % 10 == 0:
+            print(f"PFI done for feature {j}/{n_features}")
+
+    return importance
+
+pfi = permutation_feature_importance(
+    model=model,
+    x_val=va_data,
+    time_val=va_time,
+    label_val=va_label,
+    eval_horizon=eval_horizon,
+    n_repeats=3
+)
+
+print("PFI shape:", pfi.shape)  # (num_Event, num_features)
+
+# Top 10 features per event
+for k in range(num_Event):
+    top_idx = np.argsort(-pfi[k])[:10]
+    print(f"\nTop features for event {k+1}:")
+    print(top_idx)
+    print(pfi[k, top_idx])
+'''
+    
 path = np.array([
-    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Uppsala_Örebro_model_data_binary.csv",
-    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Väst_model_data_binary.csv",
-    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Syd_model_data_binary.csv",
-    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Sydöstra_model_data_binary.csv",
-    "/Users/mehman/Projects/0_Reference_Data/0_otherRegions/Processed/Region_Norr_model_data_binary.csv"]
+    data_dir / "Region_Uppsala_Örebro_model_data_binary.csv",
+    data_dir / "Region_Väst_model_data_binary.csv",
+    data_dir / "Region_Syd_model_data_binary.csv",
+    data_dir / "Region_Sydöstra_model_data_binary.csv",
+    data_dir / "Region_Norr_model_data_binary.csv"]
     )
 Region_names = {
     0: "Region Uppsala_Örebro",
