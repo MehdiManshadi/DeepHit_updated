@@ -22,6 +22,7 @@ SEED = 321
 
 num_Event = 2
 eval_time = 12
+eval_horizon = 12  # same as eval_time, used for C-index evaluation
 CV_ITERATION = 5
 
 def setSeed(seed=SEED):
@@ -93,7 +94,7 @@ for i in range(CV_ITERATION):
         dropout=0.25   
     )
 
-    # Build model (optional sanity check)
+    # Build model 
     pmf = model(tr_data[:2], training=False)
     print("PMF shape:", pmf.shape)   # (B, K, T)
 
@@ -126,7 +127,6 @@ for i in range(CV_ITERATION):
             )
         return cidx
 
-    eval_horizon = 12  # same horizon you report in results
 
     baseline_cindex = compute_cindex_at_time(
         model,
