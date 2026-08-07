@@ -25,7 +25,6 @@ iteration_history = []
 def TrainDeepHit(
     model,
     tr_data, tr_mask1, tr_mask2, tr_time, tr_label,
-    va_data, va_mask1, va_mask2, va_time, va_label,
     eval_time,
     test_size=0.2,
     max_epochs=100,
@@ -155,7 +154,7 @@ def TrainDeepHit(
         if teLoss < best_test_loss:
             best_test_loss = teLoss
             best_weights = model.get_weights()
-            patience = 3
+            patience = 10
         else:
             patience -= 1
 
@@ -166,7 +165,7 @@ def TrainDeepHit(
         # ==================================================
         # C-index evaluation
         # ==================================================
-        pred = model.call(va_data, training=False).numpy()
+        pred = model.call(te_data, training=False).numpy()
         resultfeat = np.zeros([num_Event, len(eval_time)])
 
         for t, t_time in enumerate(eval_time):
@@ -182,31 +181,16 @@ def TrainDeepHit(
             for k in range(num_Event):
                 resultfeat[k, t] = c_index(
                     risk[:, k],
-                    va_time,
-                    (va_label[:, 0] == k + 1).astype(int),
+                    te_time,
+                    (te_label[:, 0] == k + 1).astype(int),
                     eval_horizon
                 )
-        '''
-        # ==================================================
-        # Best model tracking
-        # ==================================================
-        if resultfeat[0, 0] > best_cindex:
-            best_cindex = resultfeat[0, 0]
-            best_weights = model.get_weights()
-            patience = 10      
-
-        else:
-            patience -= 1
-
-        if patience == 0:
-            print(f"Early stopping at epoch {epoch}")
-            break'''
 
         print(
             f"Epoch {epoch:03d} | "
             f"Train {np.mean(epoch_losses):.4f} "
             f"(LL {np.mean(epoch_ll):.4f}, Rank {np.mean(epoch_rank):.4f}) | "
-            #f"Test {teLoss:.4f} | "
+            f"Test {teLoss:.4f} | "
             f"Test C-index {resultfeat[0, 0]:.4f} "
             f"(competing event: {resultfeat[1, 0]:.4f})"
         )
