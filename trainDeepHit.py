@@ -105,22 +105,19 @@ def TrainDeepHit(
 
     print("\n===== START TRAINING =====\n")
 
-    train_losses = []
-    train_ll = []
-    train_rank = []
-
     global_iter = 0
-    best_train_loss = np.inf
-    best_cindex = -np.inf
-    best_cindex_comp = None
-    best_model = None
+    best_test_loss = np.inf
     patience = 3
+    best_cindex = -np.inf
 
     # ==================================================
     # Training loop
     # ==================================================
     for epoch in range(max_epochs):
-
+        # reset metrics for this epoch
+        epoch_losses = []
+        epoch_ll = []
+        epoch_rank = []
         idx = np.random.permutation(N)
 
         for i in range(0, N, batch_size):
@@ -134,18 +131,18 @@ def TrainDeepHit(
                 tr_time[b]
             )
 
-            train_losses.append(loss.numpy())
-            train_ll.append(ll.numpy())
-            train_rank.append(rank.numpy())
+            epoch_losses.append(loss.numpy())
+            epoch_ll.append(ll.numpy())
+            epoch_rank.append(rank.numpy())
 
             batch_loss_history.append(loss.numpy())
             iteration_history.append(global_iter)
             global_iter += 1
-
+        
         # ==================================================
         # Validation loss (early stopping)
         # ==================================================
-        teLoss, teLL, teRank = testStep(
+        teLoss, _, _ = testStep(
             te_data,
             te_mask1,
             te_mask2,
@@ -153,21 +150,23 @@ def TrainDeepHit(
             te_time
         )
 
-        teLoss_val = teLoss.numpy()
+        teLoss= teLoss.numpy()
 
-        if teLoss_val < best_train_loss:
-            best_train_loss = teLoss_val
+        if teLoss < best_test_loss:
+            best_test_loss = teLoss
+            best_weights = model.get_weights()
             patience = 3
         else:
             patience -= 1
 
         if patience == 0:
+            print(f"Early stopping at epoch {epoch}")
             break
-
+        
         # ==================================================
         # C-index evaluation
         # ==================================================
-        pred = model.call(va_data)
+        pred = model.call(va_data, training=False).numpy()
         resultfeat = np.zeros([num_Event, len(eval_time)])
 
         for t, t_time in enumerate(eval_time):
@@ -187,25 +186,30 @@ def TrainDeepHit(
                     (va_label[:, 0] == k + 1).astype(int),
                     eval_horizon
                 )
-
+        '''
         # ==================================================
         # Best model tracking
         # ==================================================
         if resultfeat[0, 0] > best_cindex:
             best_cindex = resultfeat[0, 0]
-            best_cindex_comp = resultfeat[1, 0]
-            best_model = model
+            best_weights = model.get_weights()
+            patience = 10      
+
+        else:
+            patience -= 1
+
+        if patience == 0:
+            print(f"Early stopping at epoch {epoch}")
+            break'''
 
         print(
             f"Epoch {epoch:03d} | "
-            f"Train {np.mean(train_losses):.4f} "
-            f"(LL {np.mean(train_ll):.4f}, Rank {np.mean(train_rank):.4f}) | "
-            f"Val {teLoss_val:.4f}"
+            f"Train {np.mean(epoch_losses):.4f} "
+            f"(LL {np.mean(epoch_ll):.4f}, Rank {np.mean(epoch_rank):.4f}) | "
+            #f"Test {teLoss:.4f} | "
+            f"Test C-index {resultfeat[0, 0]:.4f} "
+            f"(competing event: {resultfeat[1, 0]:.4f})"
         )
 
-    print(
-        f"\nBest C-index: {best_cindex:.3f} "
-        f"(competing event: {best_cindex_comp:.3f})\n"
-    )
-
-    return best_model
+    model.set_weights(best_weights) # Restore best model weights
+    return model
