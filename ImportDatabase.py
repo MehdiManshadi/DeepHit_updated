@@ -99,6 +99,7 @@ def import_dataset(csv_path, time_scale=1.2):
     time = df["time"].to_numpy().reshape(-1, 1)
     label = df["label"].to_numpy().astype(int).reshape(-1, 1)
     data = df.iloc[:, 2:].to_numpy()
+    feature_names = df.columns[2:].tolist()
 
     # ---- DeepHit configuration ----
     num_category = int(np.round(np.max(time) * time_scale))
@@ -111,7 +112,7 @@ def import_dataset(csv_path, time_scale=1.2):
 
     # ---- Output structure ----
     dim = x_dim
-    data_tuple = (data, time, label)
-    mask_tuple = (mask1, mask2)
+    data_tuple = (data.astype(np.float32), time.astype(np.float32), label)
+    mask_tuple = (mask1.astype(np.float32), mask2.astype(np.float32))
 
-    return dim, data_tuple, mask_tuple
+    return dim, data_tuple, mask_tuple, feature_names
