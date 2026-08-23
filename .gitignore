@@ -5,3 +5,5 @@ venv/
 .env
 *.png
 *.csv
+.DS_Store
+shap/
