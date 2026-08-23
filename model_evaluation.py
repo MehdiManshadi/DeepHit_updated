@@ -6,6 +6,8 @@ import pandas as pd
 import statsmodels.api as sm
 import shap
 from pathlib import Path
+from matplotlib.ticker import AutoMinorLocator
+
 
 def bootstrap_cindex_at_time(
     model,
@@ -843,57 +845,25 @@ def plot_feature_risk_comparison(
 
 
 
-def evaluate_time_dependent_shap(
+import numpy as np
+import pandas as pd
+import shap
+
+
+def compute_time_dependent_shap(
     model,
     data,
     feature_names=None,
     event_index=0,
     horizon=12,
     n_background=50,
-    top_features=10,
     seed=321,
-    output_dir="shap",
-    show_plots=True,
 ):
     """
-    Calculate time-dependent SHAP values for a trained DeepHit model.
+    Compute time-dependent SHAP values for a trained DeepHit model.
 
-    Parameters
-    ----------
-    model :
-        Trained DeepHit model.
-
-    data : np.ndarray or pd.DataFrame
-        Preprocessed model input data.
-
-    feature_names : list, optional
-        Feature names when data is an array.
-
-    event_index : int
-        Event index to explain.
-
-    horizon : int
-        Last time-bin index included in the analysis.
-
-    n_background : int
-        Number of background patients used by SHAP.
-
-    top_features : int
-        Number of features displayed in the plots.
-
-    seed : int
-        Random seed.
-
-    output_dir : str or Path, optional
-        Directory for saving results. Nothing is saved when None.
-
-    show_plots : bool
-        Whether to display the plots.
-
-    Returns
-    -------
-    dict
-        SHAP results and importance tables.
+    This function performs calculations only. It does not create
+    plots or save files.
     """
 
     # ============================================================
@@ -935,17 +905,11 @@ def evaluate_time_dependent_shap(
             "the number of data columns."
         )
 
-    print(
-        "Complete dataset shape:",
-        data_array.shape,
-    )
-
     # ============================================================
     # 2. DeepHit cumulative-incidence prediction
     # ============================================================
 
     def predict_event_cif(x):
-        """Return event-specific CIF through the selected horizon."""
 
         x = np.asarray(
             x,
@@ -987,20 +951,14 @@ def evaluate_time_dependent_shap(
             axis=1,
         )
 
-    test_prediction = predict_event_cif(
+    # Check the prediction output
+    predict_event_cif(
         data_array[:2]
     )
 
-    print(
-        "Cumulative-incidence output shape:",
-        test_prediction.shape,
-    )
-
     # ============================================================
-    # 3. Prepare SHAP background data
+    # 3. Select SHAP background
     # ============================================================
-
-    explain_data = data_array
 
     rng = np.random.default_rng(seed)
 
@@ -1019,18 +977,8 @@ def evaluate_time_dependent_shap(
         background_indices
     ]
 
-    print(
-        "Background data shape:",
-        background_data.shape,
-    )
-
-    print(
-        "Explained data shape:",
-        explain_data.shape,
-    )
-
     # ============================================================
-    # 4. Create SHAP explainer
+    # 4. Calculate SHAP values
     # ============================================================
 
     masker = shap.maskers.Independent(
@@ -1057,19 +1005,11 @@ def evaluate_time_dependent_shap(
         2 * data_array.shape[1] + 1,
     )
 
-    print(
-        "Calculating SHAP values for all patients..."
-    )
-
     explanation = explainer(
-        explain_data,
+        data_array,
         max_evals=max_evaluations,
         batch_size=128,
     )
-
-    # ============================================================
-    # 5. Extract and verify SHAP values
-    # ============================================================
 
     time_shap = np.asarray(
         explanation.values
@@ -1081,19 +1021,18 @@ def evaluate_time_dependent_shap(
         horizon + 1,
     )
 
-    print(
-        "Time-dependent SHAP shape:",
-        time_shap.shape,
-    )
-
     if time_shap.shape != expected_shape:
         raise ValueError(
             f"Expected SHAP shape {expected_shape}, "
             f"but received {time_shap.shape}."
         )
 
+    # ============================================================
+    # 5. Check SHAP reconstruction
+    # ============================================================
+
     predicted_cif = predict_event_cif(
-        explain_data
+        data_array
     )
 
     base_values = np.asarray(
@@ -1115,18 +1054,8 @@ def evaluate_time_dependent_shap(
         predicted_cif - reconstructed_cif
     )
 
-    print(
-        "Mean reconstruction error:",
-        reconstruction_error.mean(),
-    )
-
-    print(
-        "Maximum reconstruction error:",
-        reconstruction_error.max(),
-    )
-
     # ============================================================
-    # 6. Integrated time-dependent importance
+    # 6. Calculate feature importance
     # ============================================================
 
     time_points = np.arange(
@@ -1152,6 +1081,17 @@ def evaluate_time_dependent_shap(
         axis=0,
     )
 
+    mean_absolute_shap_by_time = np.mean(
+        np.abs(time_shap),
+        axis=0,
+    )
+
+    shap_at_horizon = time_shap[
+        :,
+        :,
+        horizon,
+    ]
+
     importance_table = pd.DataFrame({
         "Feature_index": np.arange(
             len(feature_names)
@@ -1166,166 +1106,24 @@ def evaluate_time_dependent_shap(
         ascending=False,
     ).reset_index(drop=True)
 
-    print(
-        "\nGlobal time-dependent SHAP importance:"
-    )
-
-    print(
-        importance_table.head(top_features)
-    )
-
     # ============================================================
-    # 7. Output settings
-    # ============================================================
-
-    if output_dir is not None:
-        output_dir = Path(output_dir)
-        output_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        importance_table.to_csv(
-            output_dir
-            / "DeepHit_time_dependent_SHAP_importance.csv",
-            index=False,
-        )
-
-    def finish_plot(filename):
-        """Save, display or close the current plot."""
-
-        plt.tight_layout()
-
-        if output_dir is not None:
-            plt.savefig(
-                output_dir / filename,
-                dpi=300,
-                bbox_inches="tight",
-            )
-
-        if show_plots:
-            plt.show()
-        else:
-            plt.close()
-
-    # ============================================================
-    # 8. Global integrated-importance plot
-    # ============================================================
-
-    global_plot_data = (
-        importance_table
-        .head(top_features)
-        .sort_values(
-            "Mean_integrated_absolute_SHAP",
-            ascending=True,
-        )
-    )
-
-    plt.figure(figsize=(9, 6))
-
-    plt.barh(
-        global_plot_data["Feature"],
-        global_plot_data[
-            "Mean_integrated_absolute_SHAP"
-        ],
-        color="#2878B5",
-    )
-
-    plt.xlabel(
-        "Mean integrated absolute SHAP value"
-    )
-    plt.ylabel("Feature")
-
-    plt.title(
-        "DeepHit time-dependent feature importance\n"
-        f"Event {event_index}, time 0–{horizon}"
-    )
-
-    finish_plot(
-        "DeepHit_global_time_dependent_SHAP.png"
-    )
-
-    # ============================================================
-    # 10. Population-level importance over time
-    # ============================================================
-
-    mean_absolute_shap_by_time = np.mean(
-        np.abs(time_shap),
-        axis=0,
-    )
-
-    global_top_indices = np.argsort(
-        -global_importance
-    )[:top_features]
-
-    plt.figure(figsize=(11, 7))
-
-    for feature_index in global_top_indices:
-        plt.plot(
-            time_points,
-            mean_absolute_shap_by_time[
-                feature_index,
-                :,
-            ],
-            marker="o",
-            markersize=3,
-            linewidth=1.8,
-            label=feature_names[feature_index],
-        )
-
-    plt.xlabel("Time-bin index")
-    plt.ylabel("Mean absolute SHAP value")
-    plt.title(
-        "Population-level feature importance over time"
-    )
-
-    plt.legend(
-        bbox_to_anchor=(1.05, 1),
-        loc="upper left",
-    )
-
-    finish_plot(
-        "DeepHit_population_time_dependent_SHAP.png"
-    )
-
-    # ============================================================
-    # 11. SHAP summary at selected horizon
-    # ============================================================
-
-    shap_at_horizon = time_shap[
-        :,
-        :,
-        horizon,
-    ]
-
-    shap.summary_plot(
-        shap_at_horizon,
-        explain_data,
-        feature_names=feature_names,
-        max_display=top_features,
-        show=False,
-    )
-
-    plt.title(
-        f"Event {event_index} cumulative incidence "
-        f"at time {horizon}"
-    )
-
-    finish_plot(
-        f"DeepHit_SHAP_summary_at_horizon_{horizon}.png"
-    )
-
-    # ============================================================
-    # 12. Return results
+    # 7. Return results
     # ============================================================
 
     return {
         "explanation": explanation,
+        "explain_data": data_array,
+        "feature_names": feature_names,
         "time_shap": time_shap,
+        "shap_at_horizon": shap_at_horizon,
         "integrated_shap": integrated_shap,
         "global_importance": global_importance,
+        "mean_absolute_shap_by_time":
+            mean_absolute_shap_by_time,
         "importance_table": importance_table,
         "predicted_cif": predicted_cif,
         "reconstruction_error": reconstruction_error,
         "time_points": time_points,
+        "event_index": event_index,
+        "horizon": horizon,
     }
